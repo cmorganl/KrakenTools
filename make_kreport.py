@@ -60,7 +60,7 @@ class Tree(object):
         self.children.append(node)
 #################################################################################
 #Main method
-def main():
+def main(sys_args):
     #Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-i','--input', '-k','--kraken', dest='kraken_file', required=True,
@@ -72,7 +72,7 @@ def main():
     parser.add_argument('--use-read-len',dest='use_read_len',
         action='store_true',default=False, required=False,
         help='Make report file using sum of read lengths [default: read counts]')
-    args = parser.parse_args()
+    args = parser.parse_args(sys_args)
 
     #Start Program
     time = strftime("%m-%d-%Y %H:%M:%S", gmtime())
@@ -195,7 +195,7 @@ def main():
 
 #################################################################################
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
 #################################################################################
 ##################################END OF PROGRAM#################################
 #################################################################################
