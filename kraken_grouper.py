@@ -9,7 +9,7 @@ import argparse
 
 import tqdm
 
-from .make_kreport import main as kreport_main
+from make_kreport import main as kreport_main
 
 ##
 # Test suite for kraken_grouper.py
@@ -26,6 +26,7 @@ class GrouperTester(unittest.TestCase):
         self.kraken_tab = "test_data/test.kraken"
         self.kreport = "test_data/test.kreport"
         self.kraken_one = "test_data/levelled_group.kraken"
+        self.taxonomy = "test_data/ktaxonomy.tsv"
 
         # Class instances
         self.k_match = KrakenMatch()
@@ -58,6 +59,12 @@ class GrouperTester(unittest.TestCase):
         return
 
     def test_find_lca_taxid(self):
+        return
+
+    def test_kraken_grouper(self):
+        kraken_grouper(["--kraken_output", self.kraken_tab,
+                        "--taxonomy", self.taxonomy,
+                        "--output_prefix", "test_grouped"])
         return
 
 ##
