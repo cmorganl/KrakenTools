@@ -502,6 +502,8 @@ def kraken_grouper(sys_args):
     args = get_options(sys_args)
     prep_logging()
 
+    logging.info("Beginning Kraken-Grouper v{}.\n".format(__version__))
+
     kraken_match_insts = read_kraken_table(k_path=args.k_file)
     grouped_matches = group_kraken_matches(kraken_matches=kraken_match_insts,
                                            remove_pattern=args.re_pattern)
