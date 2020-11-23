@@ -32,7 +32,7 @@
 #Optional Parameters:
 #   -h, --help..........................show help message.
 #################################################################################
-import os, sys, argparse
+import sys, argparse
 import operator
 from time import gmtime
 from time import strftime 
@@ -194,7 +194,6 @@ def main(sys_args):
     #End of program
     time = strftime("%m-%d-%Y %H:%M:%S", gmtime())
     sys.stdout.write("PROGRAM END TIME: " + time + '\n')
-    exit(0)
 
 #################################################################################
 if __name__ == "__main__":

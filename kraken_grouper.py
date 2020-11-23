@@ -3,6 +3,8 @@
 import os
 import re
 import unittest
+import pytest
+import glob
 import sys
 import logging
 import argparse
@@ -19,20 +21,36 @@ from make_kreport import main as kreport_main
 class GrouperTester(unittest.TestCase):
     def setUp(self) -> None:
         # Primitive variables
-        self.ex_kraken_line = "U\ttest_id\t562\t52\t562:13 561:4 A:31 0:1 562:3\n"
+        self.ex_kraken_line = "C\ttest_id\t562\t52\t562:13 561:4 A:31 0:1 562:3\n"
+        self.unclassified_kraken = "U\tc9f4363c-0b0e-4c90-9f56-e153c898f697_3\t0\t500\t0:409 255045:1 0:60"
         self.rm_pattern = "_\d+$"
 
         # File paths
         self.kraken_tab = "test_data/test.kraken"
+        # self.kraken_tab = "/home/connor/Bioinformatics/Koonkie/Calysta/data/barcode01.kraken2"
         self.kreport = "test_data/test.kreport"
         self.kraken_one = "test_data/levelled_group.kraken"
         self.taxonomy = "test_data/ktaxonomy.tsv"
+        self.output_prefix = "test_grouped"
 
         # Class instances
         self.k_match = KrakenMatch()
+        self.kraken_matches = []
+        test_lines = ["C\tc9f4363c-0b0e-4c90-9f56-e153c898f697_0\t9999998\t500\t0:45 9999998:5 0:155 2420306:1 0:18 1760:5 0:167 9999998:10 0:64",
+                      "C\tc9f4363c-0b0e-4c90-9f56-e153c898f697_1\t131567\t500\t0:41 2144175:3 0:252 330879:5 0:72 1705566:5 0:92",
+                      "C\tc9f4363c-0b0e-4c90-9f56-e153c898f697_2\t1883\t500\t0:238 1883:5 0:8 2:5 0:188 1330547:1 0:25",
+                      "U\tc9f4363c-0b0e-4c90-9f56-e153c898f697_3\t0\t500\t0:409 255045:1 0:60",
+                      "C\tc9f4363c-0b0e-4c90-9f56-e153c898f697_4\t1760\t500\t0:159 12916:2 0:21 384:1 0:18 1760:4 147645:1 2:5 0:22 1031538:1 0:143 1620421:3 0:75 1752398:2 0:1 2508168:3 0:9"]
+        for kraken_line in test_lines:  # type: str
+            km = KrakenMatch()
+            km.load_match(kraken_line)
+            self.kraken_matches.append(km)
         return
 
     def tearDown(self) -> None:
+        for file_path in glob.glob(self.output_prefix + "*"):
+            if os.path.isfile(file_path):
+                os.remove(file_path)
         return
 
     def test_read_kraken_table(self):
@@ -58,13 +76,57 @@ class GrouperTester(unittest.TestCase):
         self.assertEqual("1386", k_match.taxid)
         return
 
+    def test_clean_taxid_counts(self):
+        # Ensure '0' was removed
+        taxid_counts = {'0': 49, '1228': 51, 'A': 3}
+        clean_taxid_counts(taxid_counts)
+        self.assertTrue('0' not in taxid_counts)
+        self.assertTrue('A' not in taxid_counts)
+
+        # Ensure '0' was retained
+        taxid_counts = {'0': 180, '1228': 20}
+        clean_taxid_counts(taxid_counts, min_zero_proportion=0.51)
+        self.assertTrue('0' in taxid_counts)
+
+        # Ensure nothing is changed
+        taxid_counts = {'1': 180, '1228': 20, '454': 1208, '55': 666}
+        clean_taxid_counts(taxid_counts)
+        self.assertEqual(4, len(taxid_counts))
+        return
+
+    def test_find_majority_taxid(self):
+        rep = find_majority_taxid({'561': 4, '560': 12, '562': 16, '564': 8, '1': 9})
+        self.assertEqual('562', rep)
+        return
+
     def test_find_lca_taxid(self):
         return
 
+    def test_merge_kraken_matches(self):
+        base_kraken_match, taxid_counts = merge_kraken_matches(self.kraken_matches)
+        self.assertEqual(2282, taxid_counts['0'])
+        self.assertEqual(2500, base_kraken_match.seq_len)
+        self.assertTrue('' == base_kraken_match.seq_id)
+        return
+
+    def test_find_consensus_taxid_from_kraken_group(self):
+        # Exit when the list of KrakenMatch instances is empty
+        with pytest.raises(SystemExit):
+            find_consensus_taxid_from_kraken_group(seq_id="test-seq.id", kraken_matches=[])
+
+        # Ensure the k-mer match counts are being summed properly
+        final_km = find_consensus_taxid_from_kraken_group(seq_id="test-seq.id", kraken_matches=self.kraken_matches)
+        self.assertEqual('9999998', final_km.taxid)
+        self.assertTrue(final_km.classified)
+        # Ensure the final taxonomic classification is as expected
+        return
+
+    # Integrative test
     def test_kraken_grouper(self):
         kraken_grouper(["--kraken_output", self.kraken_tab,
                         "--taxonomy", self.taxonomy,
-                        "--output_prefix", "test_grouped"])
+                        "--output_prefix", self.output_prefix])
+        self.assertTrue(os.path.isfile(self.output_prefix + ".kreport"))
         return
 
 ##
@@ -115,7 +177,7 @@ class KrakenMatch:
     def __init__(self):
         self.classified = True
         self.seq_id = ""
-        self.taxid = 0
+        self.taxid = '0'
         self.seq_len = 0
         self.kmer_matches = ""
         return
@@ -253,6 +315,20 @@ def prep_logging(log_file_name=None, verbosity=False) -> None:
     return
 
 
+def clean_taxid_counts(taxid_counts, min_zero_proportion=0.99) -> None:
+    """ Remove ambiguous and missing k-mers from the dictionary, unless it's the majority """
+    try:
+        taxid_counts.pop('A')  # Remove ambiguous k-mers
+    except KeyError:
+        pass
+    try:
+        if taxid_counts['0']/sum(taxid_counts.values()) <= min_zero_proportion:
+            taxid_counts.pop('0')  # Don't include the any k-mers that were not in the database
+    except KeyError:
+        pass
+    return
+
+
 def find_lca_taxid(taxid_counts: dict, alpha=0.51) -> str:
     # TODO: Implement majority-rule LCA from the component KrakenMatch k-mer matches
     return ""
@@ -262,29 +338,58 @@ def find_majority_taxid(taxid_counts: dict) -> str:
     return max(taxid_counts, key=lambda k: taxid_counts[k])
 
 
-def find_consensus_taxid_from_kraken_group(seq_id: str, kraken_matches: list, method="majority") -> KrakenMatch:
+def merge_kraken_matches(kraken_matches: list) -> (KrakenMatch, dict):
     base_kraken_match = KrakenMatch()
-    base_kraken_match.seq_id = seq_id
     taxid_counts = {}
-    classified = False
     while kraken_matches:
         k_match = kraken_matches.pop()  # type: KrakenMatch
-        # Check that the subsequence was classified
-        if k_match.classified:
-            classified = True
         # Add the seq_length
         base_kraken_match.seq_len += int(k_match.seq_len)
         # Add the k-mer matches to the string
         base_kraken_match.kmer_matches += ' ' + k_match.kmer_matches
-        taxid_counts.update(k_match.get_taxid_kmer_map())
+        for k, v in k_match.get_taxid_kmer_map().items():  # type: (str, int)
+            try:
+                taxid_counts[k] += v
+            except KeyError:
+                taxid_counts[k] = v
+    return base_kraken_match, taxid_counts
 
-    base_kraken_match.classified = classified
+
+def find_consensus_taxid_from_kraken_group(seq_id: str, kraken_matches: list, method="majority") -> KrakenMatch:
+    """
+    When reads are split into subsequences and classified individually by Kraken, they should be reconstituted into the
+    original sequence and their individual k-mer classification should be consolidated.
+
+    This is the main function for regrouping/consolidating the individual k-mer matches for subsequences.
+    It operates on a list of KrakenMatch instances, all from the same read/supersequence, and groups the k-mer matches
+    into a single dictionary mapping NCBI taxids to counts.
+    This is then used to find the most likely taxonomic assignment, either through a simple majority-rule or by an LCA
+    voting method.
+
+    :param seq_id: The common supersequence name of all subsequences
+    :param kraken_matches: A list of KrakenMatch instances derived from the same supersequence
+    :param method: The name of the method to use to group the sub-KrakenMatch k-mer classifications,
+     either 'majority' or 'lca'
+    :return: A KrakenMatch instance that represents the whole sequence's Kraken classification
+    """
+    if len(kraken_matches) == 0:
+        logging.error("No subsequences were found for read {}.\n".format(seq_id))
+        sys.exit(7)
+
+    base_kraken_match, taxid_counts = merge_kraken_matches(kraken_matches)
+    base_kraken_match.seq_id = seq_id
+
     # Filter out irrelevant taxid codes
-    taxid_counts.pop('0')  # Don't include the any k-mers that were not in the database
-    try:
-        taxid_counts.pop('A')  # Remove ambiguous k-mers
-    except KeyError:
-        pass
+    clean_taxid_counts(taxid_counts)
+
+    if len(taxid_counts) == 0:
+        logging.debug("No taxid counts remained in read '{}' after removing ambiguous and missing taxid's.\n"
+                      "".format(seq_id))
+        base_kraken_match.taxid = '0'
+        base_kraken_match.classified = False
+        return base_kraken_match
+
+    # Determine the final taxonomic classification of the whole sequence
     if method == "majority":
         base_kraken_match.taxid = find_majority_taxid(taxid_counts)
     elif method == "lca":
@@ -293,6 +398,10 @@ def find_consensus_taxid_from_kraken_group(seq_id: str, kraken_matches: list, me
         logging.error("Unknown method ('{}') requested for grouping kraken matches of the same molecule.\n"
                       "".format(method))
         sys.exit(3)
+
+    # Check whether the sequence was classified or not
+    if base_kraken_match.taxid == '0':
+        base_kraken_match.classified = False
 
     return base_kraken_match
 
