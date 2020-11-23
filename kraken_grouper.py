@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+""" A Python script for grouping Kraken classifications of subsequences """
+
 import os
 import re
 import unittest
@@ -17,6 +19,12 @@ from make_kreport import main as kreport_main
 # Test suite for kraken_grouper.py
 ##
 
+__version__ = "0.2.0"
+__author__ = "Connor Morgan-Lang"
+__maintainer__ = "Connor Morgan-Lang"
+__license__ = "GPL v3"
+__status__ = "Development"
+
 
 class GrouperTester(unittest.TestCase):
     def setUp(self) -> None:
@@ -27,7 +35,6 @@ class GrouperTester(unittest.TestCase):
 
         # File paths
         self.kraken_tab = "test_data/test.kraken"
-        # self.kraken_tab = "/home/connor/Bioinformatics/Koonkie/Calysta/data/barcode01.kraken2"
         self.kreport = "test_data/test.kreport"
         self.kraken_one = "test_data/levelled_group.kraken"
         self.taxonomy = "test_data/ktaxonomy.tsv"
